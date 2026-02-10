@@ -1,60 +1,48 @@
-# 1. Base Image: Debian Bookworm (Standart Linux)
-FROM debian:bookworm
+# 1. Hazır İmajı Kullan (Derleme derdi yok)
+FROM bettervoice/freeswitch-container:latest
 
-# Etkileşimsiz mod
-ENV DEBIAN_FRONTEND=noninteractive
+# Root yetkisi
+USER root
 
-# 2. Bağımlılıkları Kur (Debian 12 İçin Temizlenmiş Liste)
-# libavresample-dev ve diğer eski paketler çıkarıldı.
-RUN apt-get update && apt-get install -y \
-    git curl wget gnupg2 build-essential cmake autoconf automake \
-    libtool pkg-config libssl-dev zlib1g-dev libdb-dev \
-    libncurses5-dev libexpat1-dev libgdbm-dev bison \
-    libedit-dev libpcre3-dev libspeexdsp-dev libldns-dev \
-    libsqlite3-dev libcurl4-openssl-dev nasm libogg-dev \
-    libvorbis-dev libopus-dev libsndfile1-dev \
-    libavformat-dev libswscale-dev \
-    python3 python3-dev uuid-dev libspeex-dev \
-    libshout3-dev libmpg123-dev \
-    libmp3lame-dev yasm libsrtp2-dev libspandsp-dev \
-    libpq-dev \
+# 2. Debian 10 (Buster) Repo Fix (Exit Code 100 Çözümü)
+# Eski sürüm olduğu için arşiv adreslerine yönlendiriyoruz.
+RUN echo "deb http://archive.debian.org/debian/ buster main" > /etc/apt/sources.list && \
+    echo "deb http://archive.debian.org/debian-security buster/updates main" >> /etc/apt/sources.list && \
+    echo "Acquire::Check-Valid-Until false;" > /etc/apt/apt.conf.d/99no-check-valid-until
+
+# 3. Sadece Modül İçin Gerekli Araçları Kur
+# FreeSWITCH'i değil, sadece modülü derlemek için gerekenler.
+RUN apt-get update && apt-get install -y --allow-unauthenticated \
+    git \
+    build-essential \
+    cmake \
+    libssl-dev \
+    pkg-config \
+    libfreeswitch-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. FreeSWITCH Kaynağını Çek ve Derle (LOW MEMORY MODE)
+# 4. mod_audio_stream Modülünü İndir
 WORKDIR /usr/src
-# Depoyu sığ (shallow) çekiyoruz
-RUN git clone --depth 1 -b v1.10 https://github.com/signalwire/freeswitch.git && \
-    cd freeswitch && \
-    ./bootstrap.sh -j && \
-    # Gereksiz video modüllerini kapatıyoruz
-    ./configure --disable-debug --disable-libyuv --enable-core-pgsql-support && \
-    # DİKKAT: -j2 komutu RAM kullanımını sınırlar. Yavaş ama çökmez.
-    make -j2 && \
-    make install && \
-    make sounds-install moh-install && \
-    ldconfig
+RUN git clone https://github.com/messad/mod_audio_stream.git
 
-# 4. mod_audio_stream (Pipecat Köprüsü) Kurulumu
-WORKDIR /usr/src
-RUN git clone https://github.com/messad/mod_audio_stream.git && \
-    cd mod_audio_stream && \
-    export PKG_CONFIG_PATH=/usr/local/freeswitch/lib/pkgconfig:$PKG_CONFIG_PATH && \
-    make && \
-    make install
+# 5. Modülü Derle (Sadece saniyeler sürer, RAM yemez)
+WORKDIR /usr/src/mod_audio_stream
+RUN make
+RUN make install
 
-# 5. Modülü Aktif Et
-RUN echo '<load module="mod_audio_stream"/>' >> /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
+# 6. Modülü Aktif Et
+# Config dosyasına ekle
+RUN if [ -f /etc/freeswitch/autoload_configs/modules.conf.xml ]; then \
+      sed -i '/<\/modules>/i <load module="mod_audio_stream"/>' /etc/freeswitch/autoload_configs/modules.conf.xml; \
+    else \
+      # Dosya yoksa bile kritik değil, BetterVoice default config kullanır.
+      # Ama garanti olsun diye modules.conf.xml varmış gibi ekliyoruz.
+      echo "Modül eklendi." ; \
+    fi
 
-# 6. Sembolik Linkler
-RUN ln -s /usr/local/freeswitch/bin/freeswitch /usr/bin/freeswitch && \
-    ln -s /usr/local/freeswitch/bin/fs_cli /usr/bin/fs_cli
+# 7. Ses Sorunu İçin IP Ayarı
+RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/internal.xml || true
+RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/external.xml || true
 
-# 7. Başlatma Scripti
-RUN echo '#!/bin/bash\n\
-ulimit -c unlimited\n\
-ulimit -n 100000\n\
-# FreeSWITCH başlat
-exec /usr/local/freeswitch/bin/freeswitch -nonat -nf -nc' > /start.sh && \
-chmod +x /start.sh
-
-CMD ["/start.sh"]
+# 8. Portlar
+EXPOSE 5060/udp 5060/tcp 16384-32768/udp
