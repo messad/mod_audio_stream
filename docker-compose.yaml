@@ -1,23 +1,19 @@
+# docker-compose.yml
 version: '3.8'
+
 services:
   freeswitch:
-    build: .
+    build:
+      context: .
+      secrets:
+        - USER_TOKEN
     container_name: freeswitch-pipecat
     network_mode: host
     restart: unless-stopped
-    # Volume satırları kapalı kalsın (Yorumda #).
-    # Sistem çalışınca açacağız.
-    # volumes:
-    #   - ./freeswitch/conf:/usr/local/freeswitch/conf
-    
-    environment:
-      - FREESWITCH_LOG_LEVEL=INFO
-    cap_add:
-      - SYS_NICE
-      - SYS_RESOURCE
-      - NET_ADMIN
-    ulimits:
-      core: -1
-      nofile:
-        soft: 65536
-        hard: 65536
+    volumes:
+      - ./freeswitch/conf:/etc/freeswitch
+      - ./freeswitch/recordings:/var/lib/freeswitch/recordings
+
+secrets:
+  USER_TOKEN:
+    environment: USER_TOKEN
