@@ -1,48 +1,42 @@
 FROM debian:bookworm-slim
 
+# SignalWire token'ı ARG olarak al (Coolify'de USER_TOKEN'dan geç)
 ARG SIGNALWIRE_TOKEN
 
-# Gerekli paketler (apt-transport-https vs. için ca-certificates zaten var)
+# Gerekli bağımlılıklar (fsget için curl, ve derleme için build-essential)
 RUN apt-get update && apt-get install -y \
-    wget gnupg ca-certificates git build-essential \
+    curl \
+    ca-certificates \
+    gnupg \
+    git \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# GPG key'i retry ile çek (önceki sorun için)
-RUN for i in 1 2 3; do \
-        wget --http-user=signalwire --http-password="${SIGNALWIRE_TOKEN}" \
-            -O /usr/share/keyrings/signalwire-freeswitch-repo.gpg \
-            https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg && break || \
-        (echo "Deneme $$i failed, retrying..." && sleep 2); \
-    done || (echo "GPG download failed after retries" && exit 1)
+# fsget script'i ile repo'yu ekle (release branch, install yapma – biz manuel install edeceğiz)
+RUN curl -sSL https://freeswitch.org/fsget | bash -s "${SIGNALWIRE_TOKEN}" release
 
-# APT auth conf'u MODERN YÖNTEMLE oluştur (/etc/apt/auth.conf.d/ altında)
-RUN mkdir -p /etc/apt/auth.conf.d/ && \
-    echo "machine freeswitch.signalwire.com login signalwire password ${SIGNALWIRE_TOKEN}" > /etc/apt/auth.conf.d/signalwire.conf && \
-    chmod 600 /etc/apt/auth.conf.d/signalwire.conf
-
-# Sources list (signed-by ile)
-RUN echo "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] https://freeswitch.signalwire.com/repo/deb/debian-release/ bookworm main" > /etc/apt/sources.list.d/freeswitch.list
-
-# Update + install (burada auth.conf.d sayesinde token gitmeli)
+# Repo hazır, şimdi update + spesifik paketleri kur (meta-all yerine lightweight: core + modüller + dev)
 RUN apt-get update && apt-get install -y \
     freeswitch \
     freeswitch-mod-sofia \
     freeswitch-mod-console \
     freeswitch-mod-event-socket \
     libfreeswitch-dev \
-    && rm -rf /var/lib/apt/lists/* /etc/apt/auth.conf.d/signalwire.conf  # token'ı sil (güvenlik)
+    && rm -rf /var/lib/apt/lists/* /etc/apt/auth.conf  # token'ı sil güvenlik için
 
-# mod_audio_stream derle
+# mod_audio_stream'i clone + derle (hafif, OOM olmayacak)
 RUN git clone https://github.com/henrik-me/mod_audio_stream.git /tmp/mod_audio_stream \
     && cd /tmp/mod_audio_stream \
     && make \
     && make install \
     && rm -rf /tmp/mod_audio_stream
 
-# Kullanıcı/izinler
+# FreeSWITCH kullanıcı/izinler (fsget genelde root kurar, biz düzeltelim)
 RUN groupadd -r freeswitch || true \
     && useradd -r -g freeswitch -d /etc/freeswitch -s /bin/false freeswitch || true \
     && chown -R freeswitch:freeswitch /etc/freeswitch /var/lib/freeswitch /var/log/freeswitch /var/run/freeswitch /usr/share/freeswitch /usr/lib/freeswitch/mod
+
+# Düşük latency için: RTP ayarlarını config'de tweak et (volume ile dışarı alacağız)
 
 USER freeswitch
 WORKDIR /etc/freeswitch
