@@ -1,4 +1,3 @@
-# docker-compose.yaml (Coolify yerine local test için, ama Coolify'ye uyarla)
 version: '3.8'
 
 services:
@@ -6,26 +5,34 @@ services:
     build:
       context: .
       args:
-        - SIGNALWIRE_TOKEN=${USER_TOKEN}  # Env var'dan çek
+        SIGNALWIRE_TOKEN: ${USER_TOKEN}   # Coolify env var'dan çekecek
     container_name: freeswitch-bridge
     restart: unless-stopped
-    network_mode: host  # Düşük latency için host network (direkt host portları kullan)
+    network_mode: host                    # En düşük latency için (NAT olmadan direkt host portları)
     ulimits:
-      nofile: 65535  # Yüksek file limit, latency için
-      rtprio: 99     # Realtime priority
-    volumes:
-      - ./freeswitch-config:/etc/freeswitch  # Config'leri dışarı al, düşük latency ayarları için tweak et
-      - ./freeswitch-logs:/var/log/freeswitch
-      - ./freeswitch-db:/var/lib/freeswitch/db
-    environment:
-      - TZ=Europe/Istanbul  # Zaman dilimi
+      nofile: 65535
+      rtprio: 99
     cap_add:
-      - SYS_NICE  # Priority için
+      - SYS_NICE
       - SYS_RESOURCE
+    volumes:
+      - freeswitch-config:/etc/freeswitch
+      - freeswitch-logs:/var/log/freeswitch
+      - freeswitch-db:/var/lib/freeswitch/db
+      - freeswitch-recordings:/var/lib/freeswitch/recordings  # Pipecat için ses kaydı varsa
+    environment:
+      - TZ=Europe/Istanbul
+    ports:                                # host network ile bile ports tanımlayabilirsin, ama gerek yok – host'ta direkt dinler
+      - "5060:5060"
+      - "5060:5060/udp"
+      - "5080:5080"
+      - "5080:5080/udp"
+      - "8021:8021"                       # event socket
+      # RTP için host network'te range otomatik açılır, config'de rtp-ip vs. ayarla
+      # Eğer bridge network istersen: - "10000-20000:10000-20000/udp" ekle (ama latency artar)
 
-# Kullanıcı yorumlarından (Reddit/X/forumlardan derlenmiş tips):
-# - RTP range'i vars.conf.xml'de 10000-20000 olarak sınırlı tut, autoflush enable.
-# - WebSocket için mod_audio_stream.conf.xml'de chunk size 30ms, overlap 10ms kullan (düşük latency stream).
-# - Docker'da CPU affinity pinle (taskset), ama compose'da cpuset-cpus ile.
-# - SignalWire token ile binary kurulum hızlı, source compile kaçın.
-# Başarılı build'ler için: Coolify low RAM'de -j1 ile derle, ama burada binary.
+volumes:
+  freeswitch-config:
+  freeswitch-logs:
+  freeswitch-db:
+  freeswitch-recordings:
