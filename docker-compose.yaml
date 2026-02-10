@@ -5,11 +5,10 @@ services:
     container_name: freeswitch-pipecat
     network_mode: host
     restart: unless-stopped
-    # Volume'leri ŞİMDİLİK devre dışı bıraktık.
-    # Önce sistem bir çalışsın, ayarları sonra dışarı alırız.
+    # Volume satırları kapalı kalsın (Yorumda #).
+    # Sistem çalışınca açacağız.
     # volumes:
-    #   - ./freeswitch/conf:/etc/freeswitch
-    #   - ./freeswitch/recordings:/var/lib/freeswitch/recordings
+    #   - ./freeswitch/conf:/usr/local/freeswitch/conf
     
     environment:
       - FREESWITCH_LOG_LEVEL=INFO
