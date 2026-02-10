@@ -1,49 +1,52 @@
-# 1. Base Image: Debian 11 Bullseye (FreeSWITCH deposunda var)
-FROM debian:bullseye-slim
+FROM debian:bookworm-slim
 
-# Etkileşimsiz kurulum
-ENV DEBIAN_FRONTEND=noninteractive
-
-# 2. FreeSWITCH ve Gerekli Araçları Kur (Resmi Depodan)
-# Derleme yok, sadece kurulum.
+# Install dependencies for adding repositories and basic tools
 RUN apt-get update && apt-get install -y \
-    git \
+    gnupg \
+    wget \
+    ca-certificates \
     build-essential \
-    cmake \
-    libssl-dev \
-    pkg-config \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Add SignalWire FreeSWITCH public repository key
+RUN wget -O- https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg | gpg --dearmor > /usr/share/keyrings/signalwire-freeswitch-repo.gpg
+
+# Add SignalWire FreeSWITCH repository
+RUN echo "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] https://freeswitch.signalwire.com/repo/deb/debian-release/ bookworm main" > /etc/apt/sources.list.d/freeswitch.list
+
+# Update and install FreeSWITCH packages
+RUN apt-get update && apt-get install -y \
     freeswitch \
     freeswitch-mod-sofia \
     freeswitch-mod-console \
-    freeswitch-mod-logfile \
     freeswitch-mod-event-socket \
     libfreeswitch-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. mod_audio_stream Modülünü İndir
-WORKDIR /usr/src
-RUN git clone https://github.com/messad/mod_audio_stream.git
+# Clone and compile mod_audio_stream
+RUN git clone https://github.com/henrik-me/mod_audio_stream.git /tmp/mod_audio_stream \
+    && cd /tmp/mod_audio_stream \
+    && make \
+    && make install \
+    && rm -rf /tmp/mod_audio_stream
 
-# 4. Modülü Derle (Sadece 500KB, RAM harcamaz)
-WORKDIR /usr/src/mod_audio_stream
-# Debian paketlerinde headerlar standart yoldadır
-RUN make
-RUN make install
+# Create FreeSWITCH user and group if not exists, set permissions
+RUN groupadd -r freeswitch || true \
+    && useradd -r -g freeswitch -d /etc/freeswitch freeswitch || true \
+    && chown -R freeswitch:freeswitch /etc/freeswitch \
+    && chown -R freeswitch:freeswitch /var/lib/freeswitch \
+    && chown -R freeswitch:freeswitch /usr/share/freeswitch \
+    && chown -R freeswitch:freeswitch /var/run/freeswitch
 
-# 5. Modülü Aktif Et
-# Debian 11'de config yolu: /etc/freeswitch
-RUN if [ -f /etc/freeswitch/autoload_configs/modules.conf.xml ]; then \
-      sed -i '/<\/modules>/i <load module="mod_audio_stream"/>' /etc/freeswitch/autoload_configs/modules.conf.xml; \
-    else \
-      # Dosya yoksa bile kritik değil ama garanti olsun
-      mkdir -p /etc/freeswitch/autoload_configs && \
-      echo '<configuration name="modules.conf" description="Modules"><modules><load module="mod_audio_stream"/></modules></configuration>' > /etc/freeswitch/autoload_configs/modules.conf.xml; \
-    fi
+# Set working directory
+WORKDIR /etc/freeswitch
 
-# 6. Ses/RTP Sorununu Çöz (IP Ayarı)
-# Bu ayar olmadan ses tek taraflı gidebilir
-RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/internal.xml || true
-RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/external.xml || true
+# Expose necessary ports (adjust as needed for your setup)
+EXPOSE 5060 5060/udp 5080 5080/udp 8021 8080
 
-# 7. Başlatma
-CMD ["/usr/bin/freeswitch", "-nc", "-nf"]
+# Run as freeswitch user
+USER freeswitch
+
+# Entrypoint to start FreeSWITCH in non-daemon mode
+ENTRYPOINT ["/usr/bin/freeswitch", "-nc"]
