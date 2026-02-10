@@ -1,4 +1,3 @@
-# docker-compose.yml
 version: '3.8'
 services:
   freeswitch:
@@ -6,21 +5,20 @@ services:
     container_name: freeswitch-pipecat
     network_mode: host
     restart: unless-stopped
-    volumes:
-      - ./freeswitch/conf:/usr/local/freeswitch/conf
-      - ./freeswitch/recordings:/usr/local/freeswitch/recordings
-      - ./freeswitch/storage:/usr/local/freeswitch/storage
-      - freeswitch-sounds:/usr/local/freeswitch/sounds
+    # Volume'leri ŞİMDİLİK devre dışı bıraktık.
+    # Önce sistem bir çalışsın, ayarları sonra dışarı alırız.
+    # volumes:
+    #   - ./freeswitch/conf:/etc/freeswitch
+    #   - ./freeswitch/recordings:/var/lib/freeswitch/recordings
+    
     environment:
       - FREESWITCH_LOG_LEVEL=INFO
     cap_add:
       - SYS_NICE
       - SYS_RESOURCE
+      - NET_ADMIN
     ulimits:
       core: -1
       nofile:
-        soft: 999999
-        hard: 999999
-      stack: 240
-volumes:
-  freeswitch-sounds:
+        soft: 65536
+        hard: 65536
