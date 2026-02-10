@@ -1,54 +1,42 @@
-# 1. Base Image: Safarov (Grok'un önerisi, minimal ve hızlı)
-FROM safarov/freeswitch:latest
+# 1. Base Image: Standart Debian Bookworm
+FROM debian:bookworm
 
-# 2. Root yetkisi al (İsme değil ID'ye güveniyoruz)
-USER 0
-
-# 3. Gerekli paketleri kur
-# Safarov Debian tabanlıdır, apt-get çalışır.
+# 2. FreeSWITCH'i Debian'ın Kendi Deposundan Kur
+# SignalWire veya Safarov ile uğraşmıyoruz. Debian repository'si en temizidir.
 RUN apt-get update && apt-get install -y \
+    freeswitch \
+    freeswitch-mod-sofia \
+    freeswitch-mod-console \
+    freeswitch-mod-logfile \
+    freeswitch-mod-event-socket \
+    libfreeswitch-dev \
     git \
     build-essential \
     cmake \
     libssl-dev \
     pkg-config \
-    zlib1g-dev \
-    libjpeg-dev \
-    libsqlite3-dev \
-    libcurl4-openssl-dev \
-    libpcre3-dev \
-    libspeexdsp-dev \
-    libldns-dev \
-    libedit-dev \
-    libopus-dev \
-    libsndfile1-dev \
-    libtiff-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 4. Modül Derleme Hazırlığı
-# Safarov imajında FreeSWITCH kaynak kodları (headerlar) olmayabilir.
-# Bu yüzden sadece headerları kullanmak için kaynağı çekiyoruz.
-WORKDIR /usr/src
-RUN git clone --depth 1 -b v1.10 https://github.com/signalwire/freeswitch.git
-
-# 5. mod_audio_stream'i İndir
+# 3. mod_audio_stream'i İndir ve Derle
+# Sadece bu küçük modülü derliyoruz (Saniyeler sürer, RAM yemez)
 WORKDIR /usr/src
 RUN git clone https://github.com/messad/mod_audio_stream.git
 
-# 6. Derle ve Kur
 WORKDIR /usr/src/mod_audio_stream
-# Header dosyalarının yerini göstererek derliyoruz
-RUN make INCLUDES="-I/usr/src/freeswitch/src/include -I/usr/src/freeswitch/libs/libteletone/src"
+# Debian paketlerinde header dosyaları /usr/include/freeswitch altındadır
+RUN make
+# make install, dosyayı /usr/lib/freeswitch/mod/ altına atar
 RUN make install
 
-# 7. Modülü Aktif Et
-# Config dosyası varsa ekle, yoksa oluştur
-RUN if [ -f /etc/freeswitch/autoload_configs/modules.conf.xml ]; then \
-      sed -i '/<\/modules>/i <load module="mod_audio_stream"/>' /etc/freeswitch/autoload_configs/modules.conf.xml; \
-    else \
-      mkdir -p /etc/freeswitch/autoload_configs && \
-      echo '<configuration name="modules.conf" description="Modules"><modules><load module="mod_audio_stream"/></modules></configuration>' > /etc/freeswitch/autoload_configs/modules.conf.xml; \
-    fi
+# 4. Modülü Otomatik Yükle
+# Debian'da config dosyaları /etc/freeswitch altındadır
+RUN echo '<load module="mod_audio_stream"/>' >> /etc/freeswitch/autoload_configs/modules.conf.xml
 
-# 8. Portlar
-EXPOSE 5060/udp 5060/tcp 16384-32768/udp
+# 5. SIP Profilini Düzelt (Local IP sorununu çözer)
+# Varsayılan ayarlarda bazen ses gitmez, bu komut onu düzeltir.
+RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/internal.xml || true
+RUN sed -i 's/$${local_ip_v4}/0.0.0.0/g' /etc/freeswitch/sip_profiles/external.xml || true
+
+# 6. Başlatma Komutu
+# Debian paketleri /usr/bin/freeswitch kullanır
+CMD ["/usr/bin/freeswitch", "-nc", "-nf"]
