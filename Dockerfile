@@ -1,46 +1,42 @@
-# 1. Base Image: Topluluk dostu Safarov
-FROM safarov/freeswitch:latest
-
-# Root yetkisiyle işlem yap (Paket kurulumu için şart)
-USER root
-
-# 2. Derleme Araçlarını Kur
-# mod_audio_stream'i derlemek için bu paketler şart.
+# Dockerfile
+FROM debian:bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+# Install dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    libssl-dev \
-    zlib1g-dev \
-    pkg-config \
-    libjpeg-dev \
-    libsqlite3-dev \
-    libcurl4-openssl-dev \
-    libpcre3-dev \
-    libspeexdsp-dev \
-    libldns-dev \
-    libedit-dev \
-    libopus-dev \
-    libsndfile1-dev \
-    libtiff-dev \
-    # FreeSWITCH geliştirme dosyalarını bulmaya çalışalım
-    # Eğer bu paket depoda yoksa kaynak koddan devam edeceğiz
+    git curl wget gnupg2 build-essential cmake autoconf automake \
+    libtool pkg-config libssl-dev zlib1g-dev libdb-dev \
+    libncurses5-dev libexpat1-dev libgdbm-dev bison \
+    libedit-dev libpcre3-dev libspeexdsp-dev libldns-dev \
+    libsqlite3-dev libcurl4-openssl-dev nasm libogg-dev \
+    libvorbis-dev libopus-dev libsndfile1-dev liblua5.2-dev \
+    libavformat-dev libswscale-dev libavresample-dev \
+    python3 python3-dev uuid-dev libspeex-dev libldns-dev \
+    libsndfile1-dev libopus-dev libshout3-dev libmpg123-dev \
+    libmp3lame-dev yasm libsrtp2-dev libspandsp-dev \
+    libmemcached-dev libpq-dev unixodbc-dev libmariadb-dev \
     && rm -rf /var/lib/apt/lists/*
-
-# 3. Modülü İndir (Messad Fork'u - Grok'un önerdiği)
+# Build FreeSWITCH from source
 WORKDIR /usr/src
-RUN git clone https://github.com/messad/mod_audio_stream.git
-
-# 4. Modülü Derle ve Kur
-WORKDIR /usr/src/mod_audio_stream
-# Safarov imajında header dosyaları standart yollarda olmayabilir
-# Bu yüzden Makefile'ı çalıştırmadan önce basit bir derleme deniyoruz
-RUN make
-RUN make install
-
-# 5. Modülü Aktif Et
-# modules.conf.xml dosyasının sonuna ekle
-RUN sed -i '/<\/modules>/i <load module="mod_audio_stream"/>' /etc/freeswitch/autoload_configs/modules.conf.xml
-
-# 6. Portlar (Mapping yapsan da burda dursun)
-EXPOSE 5060/udp 5060/tcp 16384-32768/udp
+RUN git clone https://github.com/signalwire/freeswitch.git -b v1.10 && \
+    cd freeswitch && \
+    ./bootstrap.sh -j && \
+    ./configure --disable-debug --disable-libyuv --enable-core-pgsql-support && \
+    make -j$(nproc) && \
+    make install && \
+    make sounds-install moh-install && \
+    ldconfig
+# Build mod_audio_stream
+WORKDIR /usr/src
+RUN git clone https://github.com/messad/mod_audio_stream.git && \
+    cd mod_audio_stream && \
+    export PKG_CONFIG_PATH=/usr/local/freeswitch/lib/pkgconfig:$PKG_CONFIG_PATH && \
+    make && \
+    make install
+# Configure FreeSWITCH
+RUN echo 'load mod_audio_stream' >> /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
+# Expose ports
+EXPOSE 5060/tcp 5060/udp 5080/tcp 5080/udp 16384-32768/udp
+# Create run script
+RUN echo '#!/bin/bash\n\ulimit -s 240\n\exec /usr/local/freeswitch/bin/freeswitch -nonat -nf' > /start.sh && \
+chmod +x /start.sh
+CMD ["/start.sh"]
