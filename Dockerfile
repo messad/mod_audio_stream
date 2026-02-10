@@ -8,14 +8,16 @@ RUN apt-get update && apt-get install -y \
     build-essential pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Add FreeSWITCH official repo (USER_TOKEN Coolify'dan gelecek)
+# Add FreeSWITCH official repo (DÜZELTİLEN KISIM BURASI)
+# 1. export komutu eklendi: Değişkenin zincirleme komutlarda kaybolmaması için.
+# 2. sources.list URL'i güncellendi: APT'nin de paketi çekerken şifreye ihtiyacı var, bu yüzden URL'e 'signalwire:$TOKEN@' formatı eklendi.
 RUN --mount=type=secret,id=USER_TOKEN \
-    TOKEN=$(cat /run/secrets/USER_TOKEN) && \
-    wget --http-user=signalwire --http-password=${TOKEN} \
+    export TOKEN=$(cat /run/secrets/USER_TOKEN) && \
+    wget --http-user=signalwire --http-password="$TOKEN" \
     -O /usr/share/keyrings/signalwire-freeswitch-repo.gpg \
     https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg && \
     echo "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] \
-    https://freeswitch.signalwire.com/repo/deb/debian-release/ $(lsb_release -sc) main" \
+    https://signalwire:${TOKEN}@freeswitch.signalwire.com/repo/deb/debian-release/ $(lsb_release -sc) main" \
     > /etc/apt/sources.list.d/freeswitch.list
 
 # Install FreeSWITCH
