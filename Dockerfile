@@ -11,13 +11,13 @@ RUN apt-get update && apt-get install -y \
 # Add FreeSWITCH official repo (DÜZELTİLEN KISIM BURASI)
 # 1. export komutu eklendi: Değişkenin zincirleme komutlarda kaybolmaması için.
 # 2. sources.list URL'i güncellendi: APT'nin de paketi çekerken şifreye ihtiyacı var, bu yüzden URL'e 'signalwire:$TOKEN@' formatı eklendi.
+# Add FreeSWITCH official repo
 RUN --mount=type=secret,id=USER_TOKEN \
-    export TOKEN=$(cat /run/secrets/USER_TOKEN) && \
+    export TOKEN=$(cat /run/secrets/USER_TOKEN | tr -d '\n') && \
     wget --http-user=signalwire --http-password="$TOKEN" \
     -O /usr/share/keyrings/signalwire-freeswitch-repo.gpg \
     https://freeswitch.signalwire.com/repo/deb/debian-release/signalwire-freeswitch-repo.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] \
-    https://signalwire:${TOKEN}@freeswitch.signalwire.com/repo/deb/debian-release/ $(lsb_release -sc) main" \
+    echo "deb [signed-by=/usr/share/keyrings/signalwire-freeswitch-repo.gpg] https://signalwire:${TOKEN}@freeswitch.signalwire.com/repo/deb/debian-release/ $(lsb_release -sc) main" \
     > /etc/apt/sources.list.d/freeswitch.list
 
 # Install FreeSWITCH
