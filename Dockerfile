@@ -4,30 +4,31 @@ FROM debian:bookworm
 # Etkileşimsiz mod
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 2. Bağımlılıkları Kur (Build Tools)
+# 2. Bağımlılıkları Kur (Debian 12 İçin Temizlenmiş Liste)
+# libavresample-dev ve diğer eski paketler çıkarıldı.
 RUN apt-get update && apt-get install -y \
     git curl wget gnupg2 build-essential cmake autoconf automake \
     libtool pkg-config libssl-dev zlib1g-dev libdb-dev \
     libncurses5-dev libexpat1-dev libgdbm-dev bison \
     libedit-dev libpcre3-dev libspeexdsp-dev libldns-dev \
     libsqlite3-dev libcurl4-openssl-dev nasm libogg-dev \
-    libvorbis-dev libopus-dev libsndfile1-dev liblua5.2-dev \
-    libavformat-dev libswscale-dev libavresample-dev \
+    libvorbis-dev libopus-dev libsndfile1-dev \
+    libavformat-dev libswscale-dev \
     python3 python3-dev uuid-dev libspeex-dev \
-    libsndfile1-dev libshout3-dev libmpg123-dev \
+    libshout3-dev libmpg123-dev \
     libmp3lame-dev yasm libsrtp2-dev libspandsp-dev \
-    libmemcached-dev libpq-dev unixodbc-dev libmariadb-dev \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 3. FreeSWITCH Kaynağını Çek ve Derle (CRASH-PROOF MODE)
+# 3. FreeSWITCH Kaynağını Çek ve Derle (LOW MEMORY MODE)
 WORKDIR /usr/src
-# Depoyu sığ (shallow) çekiyoruz, indirirken vakit kaybetmeyelim
+# Depoyu sığ (shallow) çekiyoruz
 RUN git clone --depth 1 -b v1.10 https://github.com/signalwire/freeswitch.git && \
     cd freeswitch && \
     ./bootstrap.sh -j && \
-    # Gereksiz video modüllerini kapatıp derlemeyi hafifletiyoruz
+    # Gereksiz video modüllerini kapatıyoruz
     ./configure --disable-debug --disable-libyuv --enable-core-pgsql-support && \
-    # DİKKAT: -j2 komutu RAM kullanımını sınırlar. Yavaş ama güvenli.
+    # DİKKAT: -j2 komutu RAM kullanımını sınırlar. Yavaş ama çökmez.
     make -j2 && \
     make install && \
     make sounds-install moh-install && \
@@ -44,7 +45,7 @@ RUN git clone https://github.com/messad/mod_audio_stream.git && \
 # 5. Modülü Aktif Et
 RUN echo '<load module="mod_audio_stream"/>' >> /usr/local/freeswitch/conf/autoload_configs/modules.conf.xml
 
-# 6. Sembolik Linkler (Kolaylık olsun)
+# 6. Sembolik Linkler
 RUN ln -s /usr/local/freeswitch/bin/freeswitch /usr/bin/freeswitch && \
     ln -s /usr/local/freeswitch/bin/fs_cli /usr/bin/fs_cli
 
