@@ -5,34 +5,24 @@ services:
     build:
       context: .
       args:
-        SIGNALWIRE_TOKEN: ${USER_TOKEN}   # Coolify env var'dan çekecek
+        SIGNALWIRE_TOKEN: ${USER_TOKEN}  # Env var'dan çek
     container_name: freeswitch-bridge
     restart: unless-stopped
-    network_mode: host                    # En düşük latency için (NAT olmadan direkt host portları)
+    network_mode: host  # En düşük latency: NAT olmadan direkt host portları kullan
     ulimits:
-      nofile: 65535
-      rtprio: 99
+      nofile: 65535  # Yüksek bağlantı için
+      rtprio: 99     # Realtime priority
     cap_add:
       - SYS_NICE
       - SYS_RESOURCE
     volumes:
-      - freeswitch-config:/etc/freeswitch
-      - freeswitch-logs:/var/log/freeswitch
-      - freeswitch-db:/var/lib/freeswitch/db
-      - freeswitch-recordings:/var/lib/freeswitch/recordings  # Pipecat için ses kaydı varsa
+      - ./freeswitch-config:/etc/freeswitch  # Config tweak için dışarı al (rtp-autoflush=true, chunk size 20ms)
+      - ./freeswitch-logs:/var/log/freeswitch
+      - ./freeswitch-db:/var/lib/freeswitch/db
     environment:
       - TZ=Europe/Istanbul
-    ports:                                # host network ile bile ports tanımlayabilirsin, ama gerek yok – host'ta direkt dinler
-      - "5060:5060"
-      - "5060:5060/udp"
-      - "5080:5080"
-      - "5080:5080/udp"
-      - "8021:8021"                       # event socket
-      # RTP için host network'te range otomatik açılır, config'de rtp-ip vs. ayarla
-      # Eğer bridge network istersen: - "10000-20000:10000-20000/udp" ekle (ama latency artar)
 
-volumes:
-  freeswitch-config:
-  freeswitch-logs:
-  freeswitch-db:
-  freeswitch-recordings:
+# Ekstra: Config'de düşük latency ayarları (freeswitch-config/autoload_configs/switch.conf.xml)
+# <param name="rtp-autoflush-during-bridge" value="true"/>
+# <param name="rtp-timer-mult" value="1"/>
+# mod_audio_stream.conf.xml'de: chunk-size="20" overlap="10"
