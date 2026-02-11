@@ -12,28 +12,24 @@ RUN apt-get update && apt-get install -y \
 # fsget ile repo + FreeSWITCH kur
 RUN curl -sSL https://freeswitch.org/fsget | bash -s "${SIGNALWIRE_TOKEN}" release install
 
-# fsget sonrası repo hazır olunca
-RUN apt-get update && \
-    apt-cache search freeswitch | grep -i dev || echo "No dev packages found in repo" && \
-    apt-cache policy freeswitch-dev libfreeswitch-dev || true && \
-    exit 0  # build devam etsin diye
+# ... fsget sonrası ...
 
-# mod_audio_stream bağımlılıkları (paket adını freeswitch-dev olarak değiştir)
-RUN apt-get update && \
-    apt-get install -y libssl-dev zlib1g-dev libevent-dev libspeexdsp-dev && \
-    (apt-get install -y freeswitch-dev || apt-get install -y libfreeswitch-dev || echo "Dev paketi bulunamadı, fallback ile devam" && exit 0) && \
-    rm -rf /var/lib/apt/lists/*
+# Dev paketi yoksa fallback: FreeSWITCH source'dan include'ları çek (hafif)
+RUN if ! apt-get install -y freeswitch-dev libfreeswitch-dev 2>/dev/null; then \
+      git clone --depth=1 --branch v1.10 https://github.com/signalwire/freeswitch.git /tmp/freeswitch-source && \
+      mkdir -p /usr/include/freeswitch && \
+      cp -r /tmp/freeswitch-source/include/* /usr/include/freeswitch/ && \
+      rm -rf /tmp/freeswitch-source; \
+    fi
 
-# mod_audio_stream derle (amigniter fork)
-WORKDIR /usr/src
-RUN git clone https://github.com/amigniter/mod_audio_stream.git && \
-    cd mod_audio_stream && \
+# mod_audio_stream derle (header'lar şimdi var)
+RUN git clone https://github.com/amigniter/mod_audio_stream.git /usr/src/mod_audio_stream && \
+    cd /usr/src/mod_audio_stream && \
     git submodule init && git submodule update && \
     mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release .. && \
-    make -j$(nproc) && \
-    make install && \
-    cd /usr/src && rm -rf mod_audio_stream
+    cmake -DCMAKE_BUILD_TYPE=Release -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch .. && \
+    make && make install && \
+    rm -rf /usr/src/mod_audio_stream
 
 # mod_audio_stream'ı autoload et
 RUN sed -i '/mod_audio_stream/d' /etc/freeswitch/autoload_configs/modules.conf.xml 2>/dev/null || true && \
