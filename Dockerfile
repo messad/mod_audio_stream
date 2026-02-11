@@ -14,26 +14,29 @@ RUN apt-get update && apt-get install -y \
 # fsget ile repo + paketleri kur (401 atlatıldı)
 RUN curl -sSL https://freeswitch.org/fsget | bash -s "${SIGNALWIRE_TOKEN}" release install
 
-# Dev paketi yoksa fallback: FreeSWITCH source'dan include dosyalarını çek (tam clone)
+# Dev paketi yoksa fallback: FreeSWITCH source'dan include'ları çek (doğru branch + submodule)
 RUN if ! apt-cache policy freeswitch-dev | grep -q Candidate; then \
-        echo "Dev paketi repo'da yok, fallback ile include'ları çekiyoruz..." && \
+        echo "Dev paketi yok, source include'ları çekiyoruz..." && \
         git clone https://github.com/signalwire/freeswitch.git /tmp/freeswitch-source && \
         cd /tmp/freeswitch-source && \
-        git checkout v1.10 && \
+        git checkout v1.10.12 && \  # En son v1.10 release tag'i (include mevcut)
+        git submodule update --init --recursive && \  # libs/libks, spandsp vs. getir
         mkdir -p /usr/include/freeswitch && \
-        cp -r include/* /usr/include/freeswitch/ && \
-        cp -r libs/libks/include/* /usr/include/freeswitch/ 2>/dev/null || true && \
-        cp -r libs/spandsp/src/* /usr/include/freeswitch/ 2>/dev/null || true && \
+        cp -r include/* /usr/include/freeswitch/ 2>/dev/null || true && \
+        find . -name '*.h' -exec cp {} /usr/include/freeswitch/ \; 2>/dev/null || true && \  # Tüm .h dosyalarını bul ve kopyala (fallback)
         rm -rf /tmp/freeswitch-source; \
     fi
 
-# mod_audio_stream derle (amigniter fork, PKG_CONFIG_PATH ile header bulsun)
+# mod_audio_stream derle
 WORKDIR /usr/src
 RUN git clone https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule init && git submodule update && \
     mkdir build && cd build && \
-    cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr .. && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr \
+          -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
+          -DFREESWITCH_LIB_DIR=/usr/lib/freeswitch .. && \
     make && make install && \
     cd /usr/src && rm -rf mod_audio_stream
 
