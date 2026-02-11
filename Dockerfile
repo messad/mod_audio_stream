@@ -1,41 +1,44 @@
-FROM debian:bookworm-slim
+FROM debian:bullseye-slim
 
-ARG SIGNALWIRE_TOKEN
+ENV DEBIAN_FRONTEND=noninteractive
 
-# Gerekli araçlar (curl için fsget, diğerleri için)
 RUN apt-get update && apt-get install -y \
-    curl ca-certificates gnupg git build-essential \
+    gnupg2 wget ca-certificates lsb-release \
+    build-essential git pkg-config libfreeswitch-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# fsget ile repo'yu ekle (token'ı geçir, release branch)
-# Script auth.conf'u otomatik kurar, 401'leri handle eder
-RUN curl -sSL https://freeswitch.org/fsget | bash -s "${SIGNALWIRE_TOKEN}" release || \
-    (echo "fsget FAILED – token'ı kontrol et veya SignalWire support'a yaz" && exit 1)
+# Debian main + contrib repo (FreeSWITCH paketleri contrib'ta)
+RUN echo "deb http://deb.debian.org/debian bullseye main contrib non-free" > /etc/apt/sources.list && \
+    echo "deb http://deb.debian.org/debian bullseye-updates main contrib non-free" >> /etc/apt/sources.list && \
+    echo "deb http://security.debian.org/debian-security bullseye-security main contrib non-free" >> /etc/apt/sources.list
 
-# Repo hazır, update + install (meta-all yerine lightweight paketler)
-RUN apt-get update || (echo "apt update FAILED after fsget – log yukarıda" && exit 1)
-
-RUN apt-get install -y \
+RUN apt-get update && apt-get install -y \
     freeswitch \
     freeswitch-mod-sofia \
     freeswitch-mod-console \
     freeswitch-mod-event-socket \
-    libfreeswitch-dev \
-    && rm -rf /var/lib/apt/lists/* /etc/apt/auth.conf /etc/apt/auth.conf.d/*  # token kalıntılarını sil
+    && rm -rf /var/lib/apt/lists/*
 
-# mod_audio_stream derle
-RUN git clone https://github.com/henrik-me/mod_audio_stream.git /tmp/mod_audio_stream \
-    && cd /tmp/mod_audio_stream \
-    && make \
-    && make install \
-    && rm -rf /tmp/mod_audio_stream
+# mod_audio_stream (orijinal repo, henrik-me'nin fork'u stabil)
+WORKDIR /usr/src
+RUN git clone https://github.com/henrik-me/mod_audio_stream.git && \
+    cd mod_audio_stream && \
+    make && \
+    make install && \
+    rm -rf /usr/src/mod_audio_stream
 
-# Kullanıcı/izinler
-RUN groupadd -r freeswitch 2>/dev/null || true \
-    && useradd -r -g freeswitch -d /etc/freeswitch -s /bin/false freeswitch 2>/dev/null || true \
-    && chown -R freeswitch:freeswitch /etc/freeswitch /var/{lib,log,run,spool}/freeswitch /usr/share/freeswitch /usr/lib/freeswitch/mod
+# mod_audio_stream'ı autoload et (eğer modules.conf.xml'de yoksa)
+RUN echo 'loadmodule mod_audio_stream' >> /etc/freeswitch/autoload_configs/modules.conf.xml || true
+
+# Kullanıcı ve izinler
+RUN groupadd -r freeswitch && \
+    useradd -r -g freeswitch -d /etc/freeswitch freeswitch && \
+    chown -R freeswitch:freeswitch /etc/freeswitch /var/{lib,log,run,spool}/freeswitch /usr/share/freeswitch /usr/lib/freeswitch/mod
 
 USER freeswitch
 WORKDIR /etc/freeswitch
-EXPOSE 5060 5060/udp 5080 5080/udp 8021
-ENTRYPOINT ["/usr/bin/freeswitch", "-nc"]
+
+EXPOSE 5060 5060/udp 5080 5080/udp 8021 16384-32768/udp
+
+ENTRYPOINT ["/usr/bin/freeswitch"]
+CMD ["-nc"]
