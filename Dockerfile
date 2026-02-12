@@ -66,28 +66,27 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (SYMLINK + BYPASS)
+# ADIM 4: mod_audio_stream (CPATH + PHYSICAL COPY)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- FIX 1: FİZİKSEL KÖPRÜ (SYMLINK) ---
-    # CMake'in include path'leri bulamamasını umursamıyoruz.
-    # Dosyaları derleyicinin zaten baktığı yere (/usr/include) bağlıyoruz.
-    # Eğer /usr/include/event2 zaten varsa silelim, temiz olsun.
+    # --- FIX 1: FİZİKSEL KOPYALAMA ---
+    # Symlink yerine kopyalama yapıyoruz.
+    # /usr/include/event2 varsa temizle
     rm -rf /usr/include/event2 && \
-    ln -s /usr/include/x86_64-linux-gnu/event2 /usr/include/event2 && \
-    # ---------------------------------------
+    # Debian'ın sakladığı dosyaları standart yere kopyala
+    cp -r /usr/include/x86_64-linux-gnu/event2 /usr/include/ && \
+    # --------------------------------
     # --- FIX 2: FindLibevent.cmake Bypass (Configure Hatası İçin) ---
     rm libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_FOUND TRUE CACHE BOOL "Force found" FORCE)' > libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(Libevent_FOUND TRUE CACHE BOOL "Force found" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_VERSION "2.1.12" CACHE STRING "Force version" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Include dir olarak standart yolu gösteriyoruz, çünkü symlink yaptık!
+    # Include dir olarak standart yolu gösteriyoruz (kopyalama yaptık!)
     echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_INCLUDE_DIRS "/usr/include" CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Libraries
     echo 'set(LIBEVENT_CORE_FOUND TRUE CACHE BOOL "Force core" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so" CACHE FILEPATH "Force core lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_PTHREADS_FOUND TRUE CACHE BOOL "Force pthreads" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
@@ -99,6 +98,12 @@ RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY} CACHE FILEPATH "Force libs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     # ----------------------------------------------------
     mkdir build && cd build && \
+    # --- FIX 3: ORTAM DEĞİŞKENLERİ (CPATH) ---
+    # Derleyiciye bu yolları zorla gösteriyoruz.
+    export CPATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
+    export C_INCLUDE_PATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
+    export CPLUS_INCLUDE_PATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
+    # -----------------------------------------
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
