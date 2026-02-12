@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ARG SIGNALWIRE_TOKEN
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV PKG_CONFIG_PATH=/usr/lib/freeswitch/pkgconfig:/usr/local/freeswitch/lib/pkgconfig:$PKG_CONFIG_PATH
+# ENV PKG_CONFIG_PATH=/usr/lib/freeswitch/pkgconfig:/usr/local/freeswitch/lib/pkgconfig:$PKG_CONFIG_PATH
 
 # Temel araçlar ve bağımlılıklar
 RUN apt-get update && apt-get install -y \
