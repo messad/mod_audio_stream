@@ -66,27 +66,40 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (GROK ONAYLI PATCH YÖNTEMİ)
+# ADIM 4: mod_audio_stream (NÜKLEER SEÇENEK: Tam Override)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- PATCH BAŞLANGICI ---
-    # FindLibevent.cmake dosyasında "/event-config.h" aranan yeri "/event2/event-config.h" yapıyoruz.
-    # Böylece script alt klasöre bakmayı öğreniyor.
-    sed -i 's|/event-config.h|/event2/event-config.h|g' libs/libwsc/CMake/FindLibevent.cmake && \
-    # --- PATCH BİTİŞİ ---
+    # --- NÜKLEER BYPASS ---
+    # Orijinal scripti siliyoruz.
+    rm libs/libwsc/CMake/FindLibevent.cmake && \
+    # Yeni ve "akıllı" scripti yazıyoruz. Tüm bileşenleri (core, pthreads, openssl) içeriyor.
+    echo 'set(LIBEVENT_FOUND TRUE)' > libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(Libevent_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_VERSION "2.1.12")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" "/usr/include/x86_64-linux-gnu" "/usr/include/x86_64-linux-gnu/event2")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_INCLUDE_DIRS ${LIBEVENT_INCLUDE_DIR})' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Bileşenler (Components)
+    echo 'set(LIBEVENT_CORE_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_PTHREADS_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_PTHREADS_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_pthreads.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_OPENSSL_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_OPENSSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_openssl.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_EXTRA_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Ana Library Listesi
+    echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY})' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # --- BYPASS SONU ---
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
-          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
-          # Script artık /event2/ ekleyeceği için biz sadece kök yolu veriyoruz:
-          -DLIBEVENT_INCLUDE_DIR=/usr/include/x86_64-linux-gnu \
-          -DLIBEVENT_LIBEVENT_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent.so \
-          -DLIBEVENT_PTHREADS_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent_pthreads.so \
+          # Derleyiciye tüm header yollarını veriyoruz
+          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
+          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
           .. && \
     make && make install && \
     cd /usr/src && rm -rf mod_audio_stream
