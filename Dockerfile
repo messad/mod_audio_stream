@@ -66,19 +66,28 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (TOTAL OVERRIDE)
+# ADIM 4: mod_audio_stream (SYMLINK + BYPASS)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- FIX 1: FindLibevent.cmake Override (Configure Fix) ---
+    # --- FIX 1: FİZİKSEL KÖPRÜ (SYMLINK) ---
+    # CMake'in include path'leri bulamamasını umursamıyoruz.
+    # Dosyaları derleyicinin zaten baktığı yere (/usr/include) bağlıyoruz.
+    # Eğer /usr/include/event2 zaten varsa silelim, temiz olsun.
+    rm -rf /usr/include/event2 && \
+    ln -s /usr/include/x86_64-linux-gnu/event2 /usr/include/event2 && \
+    # ---------------------------------------
+    # --- FIX 2: FindLibevent.cmake Bypass (Configure Hatası İçin) ---
     rm libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_FOUND TRUE CACHE BOOL "Force found" FORCE)' > libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(Libevent_FOUND TRUE CACHE BOOL "Force found" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_VERSION "2.1.12" CACHE STRING "Force version" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" "/usr/include/x86_64-linux-gnu" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_INCLUDE_DIRS ${LIBEVENT_INCLUDE_DIR} CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Include dir olarak standart yolu gösteriyoruz, çünkü symlink yaptık!
+    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_INCLUDE_DIRS "/usr/include" CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Libraries
     echo 'set(LIBEVENT_CORE_FOUND TRUE CACHE BOOL "Force core" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so" CACHE FILEPATH "Force core lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_PTHREADS_FOUND TRUE CACHE BOOL "Force pthreads" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
@@ -88,26 +97,6 @@ RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     echo 'set(LIBEVENT_EXTRA_FOUND TRUE CACHE BOOL "Force extra" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so" CACHE FILEPATH "Force extra lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY} CACHE FILEPATH "Force libs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # --- FIX 2: CMakeLists.txt Override (Compile Fix) ---
-    # Mevcut CMakeLists.txt'yi siliyoruz.
-    rm libs/libwsc/CMakeLists.txt && \
-    # Kendi "sağlam" CMakeLists.txt'mizi yazıyoruz. Include ve Link yolları HARDCODED.
-    echo 'cmake_minimum_required(VERSION 3.5)' > libs/libwsc/CMakeLists.txt && \
-    echo 'project(libwsc)' >> libs/libwsc/CMakeLists.txt && \
-    echo 'set(CMAKE_CXX_STANDARD 11)' >> libs/libwsc/CMakeLists.txt && \
-    echo 'set(CMAKE_POSITION_INDEPENDENT_CODE ON)' >> libs/libwsc/CMakeLists.txt && \
-    # Find paketleri (ZLIB vs)
-    echo 'find_package(ZLIB REQUIRED)' >> libs/libwsc/CMakeLists.txt && \
-    # Source dosyaları
-    echo 'file(GLOB SOURCES "src/*.cpp")' >> libs/libwsc/CMakeLists.txt && \
-    # Library tanımı
-    echo 'add_library(libwsc STATIC ${SOURCES})' >> libs/libwsc/CMakeLists.txt && \
-    # VE İŞTE SİHİRLİ SATIRLAR:
-    echo 'target_include_directories(libwsc PUBLIC /usr/include/x86_64-linux-gnu /usr/include/freeswitch ${ZLIB_INCLUDE_DIRS} src)' >> libs/libwsc/CMakeLists.txt && \
-    echo 'target_link_libraries(libwsc PUBLIC /usr/lib/x86_64-linux-gnu/libevent.so /usr/lib/x86_64-linux-gnu/libevent_pthreads.so /usr/lib/x86_64-linux-gnu/libevent_openssl.so ${ZLIB_LIBRARIES})' >> libs/libwsc/CMakeLists.txt && \
-    # Install kuralları (gerekirse)
-    echo 'install(TARGETS libwsc DESTINATION lib)' >> libs/libwsc/CMakeLists.txt && \
-    echo 'install(FILES src/WebSocketClient.h src/WebSocketContext.h DESTINATION include/libwsc)' >> libs/libwsc/CMakeLists.txt && \
     # ----------------------------------------------------
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release \
