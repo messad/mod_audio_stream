@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 # fsget ile SignalWire repo + FreeSWITCH paketleri kur
 RUN curl -sSL https://freeswitch.org/fsget | bash -s "${SIGNALWIRE_TOKEN}" release install
 
-# Dev paket yoksa fallback: FreeSWITCH source'dan header dosyalarını çek
+# Dev paketi yoksa fallback: FreeSWITCH source'dan header dosyalarını çek
 RUN if ! apt-cache policy freeswitch-dev | grep -q Candidate; then \
         echo "Dev paketi repo'da yok, source'dan include'ları çekiyoruz..." && \
         git clone https://github.com/signalwire/freeswitch.git /tmp/freeswitch-source && \
@@ -22,14 +22,14 @@ RUN if ! apt-cache policy freeswitch-dev | grep -q Candidate; then \
         git checkout v1.10.12 && \
         git submodule update --init --recursive && \
         mkdir -p /usr/include/freeswitch && \
-        # Header'ları bul ve kopyala (src/include, libs/include vs.)
-        find . -type d -name include -exec cp -r {}/freeswitch/* /usr/include/freeswitch/ \; 2>/dev/null || true && \
-        find . -type d -name include -exec cp -r {}/ * /usr/include/freeswitch/ \; 2>/dev/null || true && \
-        find . -name '*.h' -exec cp {} /usr/include/freeswitch/ \; 2>/dev/null || true && \
+        # Ana include klasörünü kopyala (src/include var)
+        if [ -d "src/include" ]; then cp -r src/include/* /usr/include/freeswitch/; else echo "src/include bulunamadı"; fi && \
+        # Ekstra libs altındaki header'ları topla (libks, spandsp vs.)
+        find libs -name '*.h' -exec cp {} /usr/include/freeswitch/ \; || true && \
         cd / && rm -rf /tmp/freeswitch-source || true; \
     fi
 
-# mod_audio_stream derle (amigniter fork)
+# mod_audio_stream derle (pkg-config bypass + manuel yollar)
 WORKDIR /usr/src
 RUN git clone https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
@@ -37,8 +37,11 @@ RUN git clone https://github.com/amigniter/mod_audio_stream.git && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
+          -DPKG_CONFIG_EXECUTABLE=/bin/true \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch" \
+          -DFREESWITCH_LIBRARY_DIR=/usr/lib/freeswitch \
+          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/freeswitch/include" \
+          -DCMAKE_EXE_LINKER_FLAGS="-L/usr/lib/freeswitch -lfreeswitch" \
           .. && \
     make && make install && \
     cd /usr/src && rm -rf mod_audio_stream
