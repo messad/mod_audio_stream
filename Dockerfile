@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ARG SIGNALWIRE_TOKEN
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Temel Bağımlılıklar (DOKUNMADIK - CACHE KULLANACAK)
+# 1. Temel Bağımlılıklar (DOKUNULMADI)
 RUN apt-get update && apt-get install -y \
     build-essential cmake git autoconf automake libtool libtool-bin pkg-config \
     libssl-dev zlib1g-dev libjpeg-dev libsqlite3-dev libcurl4-openssl-dev \
@@ -13,9 +13,7 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /usr/src
 
-# --------------------------------------------------------------------------
-# ADIM 1: Sofia-SIP (DOKUNMADIK - CACHE KULLANACAK)
-# --------------------------------------------------------------------------
+# ADIM 1: Sofia-SIP (DOKUNULMADI - CACHE KULLANACAK)
 RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     cd sofia-sip && \
     ./bootstrap.sh && \
@@ -24,9 +22,7 @@ RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     make install && \
     cd .. && rm -rf sofia-sip
 
-# --------------------------------------------------------------------------
-# ADIM 2: Spandsp (DOKUNMADIK - CACHE KULLANACAK)
-# --------------------------------------------------------------------------
+# ADIM 2: Spandsp (DOKUNULMADI - CACHE KULLANACAK)
 RUN git clone https://github.com/freeswitch/spandsp.git && \
     cd spandsp && \
     ./bootstrap.sh && \
@@ -36,14 +32,11 @@ RUN git clone https://github.com/freeswitch/spandsp.git && \
     ldconfig && \
     cd .. && rm -rf spandsp
 
-# --------------------------------------------------------------------------
-# ADIM 3: FreeSWITCH (DOKUNMADIK - CACHE KULLANACAK)
-# --------------------------------------------------------------------------
+# ADIM 3: FreeSWITCH (DOKUNULMADI - CACHE KULLANACAK)
 RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd freeswitch && \
     git checkout v1.10.12 && \
     ./bootstrap.sh -j && \
-    # Modül Temizliği
     sed -i 's|^applications/mod_spandsp|#applications/mod_spandsp|g' modules.conf && \
     sed -i 's|^endpoints/mod_verto|#endpoints/mod_verto|g' modules.conf && \
     sed -i 's|^endpoints/mod_skinny|#endpoints/mod_skinny|g' modules.conf && \
@@ -61,7 +54,6 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     sed -i 's|^databases/mod_mariadb|#databases/mod_mariadb|g' modules.conf && \
     sed -i 's|^languages/|#languages/|g' modules.conf && \
     sed -i 's|^asr_tts/|#asr_tts/|g' modules.conf && \
-    # Configure
     ./configure --prefix=/usr --sysconfdir=/etc/freeswitch --localstatedir=/var \
     --disable-debug \
     --disable-libvpx --disable-libyuv --disable-zrtp \
@@ -74,20 +66,25 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream Derle (DÜZELTME: Libevent yolu elle verildi)
-# Debian'da kütüphaneler /usr/lib/x86_64-linux-gnu altındadır, CMake bunu
-# bazen otomatik bulamaz. Elle gösteriyoruz.
+# ADIM 4: mod_audio_stream Derle (DÜZELTME: Symlink ve Path)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
     mkdir build && cd build && \
+    # --- DÜZELTME BAŞLANGICI ---
+    # Debian Bookworm'da dosya '/usr/include/x86_64-linux-gnu/event2/event-config.h' yolundadır.
+    # Ancak CMake scripti bunu '/usr/include/event-config.h' olarak arar.
+    # Sembolik link oluşturarak scripti kandırıyoruz.
+    ln -s /usr/include/x86_64-linux-gnu/event2/event-config.h /usr/include/event-config.h && \
+    # --- DÜZELTME BİTİŞİ ---
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch" \
-          # --- LIBEVENT YOLU DÜZELTMESİ ---
+          # C_FLAGS'e mimari yolunu ekliyoruz ki derleyici de bulabilsin
+          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
+          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
           -DLIBEVENT_INCLUDE_DIR=/usr/include \
           -DLIBEVENT_LIBEVENT_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent.so \
           -DLIBEVENT_PTHREADS_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent_pthreads.so \
