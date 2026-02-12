@@ -66,21 +66,19 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (ENV VAR + PARENT SCOPE FIX)
+# ADIM 4: mod_audio_stream (NÜKLEER SCRIPT + HEADER ENJEKSİYONU)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- DUMMY SCRIPT OLUŞTURMA (PARENT_SCOPE EKLENDİ) ---
+    # --- FIX 1: FindLibevent.cmake Override (Configure Hatası İçin) ---
     rm libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_FOUND TRUE CACHE BOOL "Force found" FORCE)' > libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(Libevent_FOUND TRUE CACHE BOOL "Force found" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_VERSION "2.1.12" CACHE STRING "Force version" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Include Yolları (Debian Multiarch)
     echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" "/usr/include/x86_64-linux-gnu" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_INCLUDE_DIRS ${LIBEVENT_INCLUDE_DIR} CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Libraries
     echo 'set(LIBEVENT_CORE_FOUND TRUE CACHE BOOL "Force core" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so" CACHE FILEPATH "Force core lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_PTHREADS_FOUND TRUE CACHE BOOL "Force pthreads" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
@@ -90,17 +88,16 @@ RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     echo 'set(LIBEVENT_EXTRA_FOUND TRUE CACHE BOOL "Force extra" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so" CACHE FILEPATH "Force extra lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
     echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY} CACHE FILEPATH "Force libs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # --- CONFIGURATION & BUILD ---
+    # --- FIX 2: CMakeLists.txt Enjeksiyonu (Compile Hatası İçin) ---
+    # libwsc/CMakeLists.txt dosyasının 1. satırına (en tepeye) zorla include dizinini ekliyoruz.
+    # Bu, tüm target'lar için geçerli olur ve submodule bariyerini deler geçer.
+    sed -i '1iinclude_directories(/usr/include/x86_64-linux-gnu)' libs/libwsc/CMakeLists.txt && \
+    # -----------------------------------------------------------------
     mkdir build && cd build && \
-    # CFLAGS ve CXXFLAGS ortam değişkenlerini export ederek global hale getiriyoruz.
-    # Bu yöntem, CMake parametrelerinden çok daha garantidir.
-    export CFLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" && \
-    export CXXFLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
           .. && \
-    # Verbose make ile ne olup bittiğini görelim
     make VERBOSE=1 && \
     make install && \
     cd /usr/src && rm -rf mod_audio_stream
