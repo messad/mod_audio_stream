@@ -66,20 +66,24 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (GROK DÜZELTMESİ UYGULANDI)
+# ADIM 4: mod_audio_stream (GROK ONAYLI PATCH YÖNTEMİ)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
+    # --- PATCH BAŞLANGICI ---
+    # FindLibevent.cmake dosyasında "/event-config.h" aranan yeri "/event2/event-config.h" yapıyoruz.
+    # Böylece script alt klasöre bakmayı öğreniyor.
+    sed -i 's|/event-config.h|/event2/event-config.h|g' libs/libwsc/CMake/FindLibevent.cmake && \
+    # --- PATCH BİTİŞİ ---
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          # Hem genel yolu hem event2 yolunu ekliyoruz ki derleyici her türlü bulsun
-          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
-          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
-          # KRİTİK DÜZELTME: /event2 kısmını sildik! Script kendi ekleyecek.
+          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
+          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu" \
+          # Script artık /event2/ ekleyeceği için biz sadece kök yolu veriyoruz:
           -DLIBEVENT_INCLUDE_DIR=/usr/include/x86_64-linux-gnu \
           -DLIBEVENT_LIBEVENT_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent.so \
           -DLIBEVENT_PTHREADS_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent_pthreads.so \
