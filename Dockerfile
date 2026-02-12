@@ -4,11 +4,13 @@ ARG SIGNALWIRE_TOKEN
 ENV DEBIAN_FRONTEND=noninteractive
 
 # 1. Temel Bağımlılıklar
+# KRİTİK EKLEME: libevent-dev paketi listeye eklendi.
 RUN apt-get update && apt-get install -y \
     build-essential cmake git autoconf automake libtool libtool-bin pkg-config \
     libssl-dev zlib1g-dev libjpeg-dev libsqlite3-dev libcurl4-openssl-dev \
     libpcre3-dev libspeexdsp-dev libspeex-dev libldns-dev libedit-dev yasm \
     libopus-dev libsndfile1-dev unzip libtiff-dev uuid-dev \
+    libevent-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /usr/src
@@ -66,49 +68,20 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (CPATH + PHYSICAL COPY)
+# ADIM 4: mod_audio_stream (TEMİZ KURULUM)
 # --------------------------------------------------------------------------
+# Artık libevent-dev kurulu olduğu için headerlar /usr/include/event2 altında
+# otomatik olarak mevcut. Ekstra bir ayara gerek yok.
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- FIX 1: FİZİKSEL KOPYALAMA ---
-    # Symlink yerine kopyalama yapıyoruz.
-    # /usr/include/event2 varsa temizle
-    rm -rf /usr/include/event2 && \
-    # Debian'ın sakladığı dosyaları standart yere kopyala
-    cp -r /usr/include/x86_64-linux-gnu/event2 /usr/include/ && \
-    # --------------------------------
-    # --- FIX 2: FindLibevent.cmake Bypass (Configure Hatası İçin) ---
-    rm libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_FOUND TRUE CACHE BOOL "Force found" FORCE)' > libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(Libevent_FOUND TRUE CACHE BOOL "Force found" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_VERSION "2.1.12" CACHE STRING "Force version" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Include dir olarak standart yolu gösteriyoruz (kopyalama yaptık!)
-    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_INCLUDE_DIRS "/usr/include" CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_CORE_FOUND TRUE CACHE BOOL "Force core" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so" CACHE FILEPATH "Force core lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_PTHREADS_FOUND TRUE CACHE BOOL "Force pthreads" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_PTHREADS_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_pthreads.so" CACHE FILEPATH "Force pthreads lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_OPENSSL_FOUND TRUE CACHE BOOL "Force openssl" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_OPENSSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_openssl.so" CACHE FILEPATH "Force openssl lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_EXTRA_FOUND TRUE CACHE BOOL "Force extra" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so" CACHE FILEPATH "Force extra lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY} CACHE FILEPATH "Force libs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # ----------------------------------------------------
     mkdir build && cd build && \
-    # --- FIX 3: ORTAM DEĞİŞKENLERİ (CPATH) ---
-    # Derleyiciye bu yolları zorla gösteriyoruz.
-    export CPATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
-    export C_INCLUDE_PATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
-    export CPLUS_INCLUDE_PATH="/usr/include:/usr/include/x86_64-linux-gnu" && \
-    # -----------------------------------------
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
           .. && \
-    make VERBOSE=1 && \
+    make && \
     make install && \
     cd /usr/src && rm -rf mod_audio_stream
 
