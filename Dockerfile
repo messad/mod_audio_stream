@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ARG SIGNALWIRE_TOKEN
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Temel Bağımlılıklar (DOKUNULMADI)
+# 1. Temel Bağımlılıklar
 RUN apt-get update && apt-get install -y \
     build-essential cmake git autoconf automake libtool libtool-bin pkg-config \
     libssl-dev zlib1g-dev libjpeg-dev libsqlite3-dev libcurl4-openssl-dev \
@@ -66,42 +66,43 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (NÜKLEER SEÇENEK: Tam Override)
+# ADIM 4: mod_audio_stream (ENV VAR + PARENT SCOPE FIX)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
     git submodule update --init --recursive && \
-    # --- NÜKLEER BYPASS ---
-    # Orijinal scripti siliyoruz.
+    # --- DUMMY SCRIPT OLUŞTURMA (PARENT_SCOPE EKLENDİ) ---
     rm libs/libwsc/CMake/FindLibevent.cmake && \
-    # Yeni ve "akıllı" scripti yazıyoruz. Tüm bileşenleri (core, pthreads, openssl) içeriyor.
-    echo 'set(LIBEVENT_FOUND TRUE)' > libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(Libevent_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_VERSION "2.1.12")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" "/usr/include/x86_64-linux-gnu" "/usr/include/x86_64-linux-gnu/event2")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_INCLUDE_DIRS ${LIBEVENT_INCLUDE_DIR})' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Bileşenler (Components)
-    echo 'set(LIBEVENT_CORE_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_PTHREADS_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_PTHREADS_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_pthreads.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_OPENSSL_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_OPENSSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_openssl.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_EXTRA_FOUND TRUE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so")' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # Ana Library Listesi
-    echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY})' >> libs/libwsc/CMake/FindLibevent.cmake && \
-    # --- BYPASS SONU ---
+    echo 'set(LIBEVENT_FOUND TRUE CACHE BOOL "Force found" FORCE)' > libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(Libevent_FOUND TRUE CACHE BOOL "Force found" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_VERSION "2.1.12" CACHE STRING "Force version" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Include Yolları (Debian Multiarch)
+    echo 'set(LIBEVENT_INCLUDE_DIR "/usr/include" "/usr/include/x86_64-linux-gnu" CACHE PATH "Force include" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_INCLUDE_DIRS ${LIBEVENT_INCLUDE_DIR} CACHE PATH "Force include dirs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # Libraries
+    echo 'set(LIBEVENT_CORE_FOUND TRUE CACHE BOOL "Force core" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_CORE_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_core.so" CACHE FILEPATH "Force core lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_PTHREADS_FOUND TRUE CACHE BOOL "Force pthreads" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_PTHREADS_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_pthreads.so" CACHE FILEPATH "Force pthreads lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_OPENSSL_FOUND TRUE CACHE BOOL "Force openssl" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_OPENSSL_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_openssl.so" CACHE FILEPATH "Force openssl lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_EXTRA_FOUND TRUE CACHE BOOL "Force extra" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_EXTRA_LIBRARY "/usr/lib/x86_64-linux-gnu/libevent_extra.so" CACHE FILEPATH "Force extra lib" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    echo 'set(LIBEVENT_LIBRARIES "/usr/lib/x86_64-linux-gnu/libevent.so" ${LIBEVENT_CORE_LIBRARY} ${LIBEVENT_PTHREADS_LIBRARY} ${LIBEVENT_OPENSSL_LIBRARY} ${LIBEVENT_EXTRA_LIBRARY} CACHE FILEPATH "Force libs" FORCE)' >> libs/libwsc/CMake/FindLibevent.cmake && \
+    # --- CONFIGURATION & BUILD ---
     mkdir build && cd build && \
+    # CFLAGS ve CXXFLAGS ortam değişkenlerini export ederek global hale getiriyoruz.
+    # Bu yöntem, CMake parametrelerinden çok daha garantidir.
+    export CFLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" && \
+    export CXXFLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          # Derleyiciye tüm header yollarını veriyoruz
-          -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
-          -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
           .. && \
-    make && make install && \
+    # Verbose make ile ne olup bittiğini görelim
+    make VERBOSE=1 && \
+    make install && \
     cd /usr/src && rm -rf mod_audio_stream
 
 # 5. Modül Aktivasyonu
