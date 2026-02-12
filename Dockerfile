@@ -66,7 +66,7 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd /usr/src && rm -rf freeswitch
 
 # --------------------------------------------------------------------------
-# ADIM 4: mod_audio_stream (GROK STRATEJİSİ: Doğrudan event2 yolunu ver)
+# ADIM 4: mod_audio_stream (GROK DÜZELTMESİ UYGULANDI)
 # --------------------------------------------------------------------------
 WORKDIR /usr/src
 RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
@@ -76,11 +76,11 @@ RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
           -DFREESWITCH_INCLUDE_DIR=/usr/include/freeswitch \
-          # C ve CXX flaglerine hem genel hem özel yolu ekliyoruz ki header bulunabilsin
+          # Hem genel yolu hem event2 yolunu ekliyoruz ki derleyici her türlü bulsun
           -DCMAKE_C_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
           -DCMAKE_CXX_FLAGS="-I/usr/include/freeswitch -I/usr/include/x86_64-linux-gnu -I/usr/include/x86_64-linux-gnu/event2" \
-          # Grok'un önerdiği nokta atışı yol:
-          -DLIBEVENT_INCLUDE_DIR=/usr/include/x86_64-linux-gnu/event2 \
+          # KRİTİK DÜZELTME: /event2 kısmını sildik! Script kendi ekleyecek.
+          -DLIBEVENT_INCLUDE_DIR=/usr/include/x86_64-linux-gnu \
           -DLIBEVENT_LIBEVENT_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent.so \
           -DLIBEVENT_PTHREADS_LIBRARY=/usr/lib/x86_64-linux-gnu/libevent_pthreads.so \
           .. && \
