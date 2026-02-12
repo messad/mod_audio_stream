@@ -3,7 +3,7 @@ FROM debian:bookworm-slim
 ARG SIGNALWIRE_TOKEN
 ENV DEBIAN_FRONTEND=noninteractive
 
-# 1. Temel Bağımlılıklar (Minimal)
+# 1. Temel Bağımlılıklar
 RUN apt-get update && apt-get install -y \
     build-essential cmake git autoconf automake libtool libtool-bin pkg-config \
     libssl-dev zlib1g-dev libjpeg-dev libsqlite3-dev libcurl4-openssl-dev \
@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src
 
 # --------------------------------------------------------------------------
-# ADIM 1: Sofia-SIP (Zorunlu)
+# ADIM 1: Sofia-SIP (Çekirdek Bağımlılığı - ŞART)
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     cd sofia-sip && \
@@ -25,7 +25,10 @@ RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     cd .. && rm -rf sofia-sip
 
 # --------------------------------------------------------------------------
-# ADIM 2: Spandsp (Zorunlu)
+# ADIM 2: Spandsp (Çekirdek Bağımlılığı - ŞART)
+# DİKKAT: Core'un çalışması için libspandsp KÜTÜPHANESİ şarttır.
+# Bunu kuruyoruz ki Core "header not found" demesin.
+# Ancak aşağıda modülünü (mod_spandsp) kapatacağız ki "versiyon uyuşmazlığı" çıkmasın.
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/freeswitch/spandsp.git && \
     cd spandsp && \
@@ -37,20 +40,23 @@ RUN git clone https://github.com/freeswitch/spandsp.git && \
     cd .. && rm -rf spandsp
 
 # --------------------------------------------------------------------------
-# ADIM 3: FreeSWITCH (VERİTABANI MODÜLLERİ KAPATILMIŞ HALİ)
+# ADIM 3: FreeSWITCH (Güvenli Derleme)
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd freeswitch && \
     git checkout v1.10.12 && \
     ./bootstrap.sh -j && \
     # ----------------------------------------------------------------------
-    # GEREKSİZ MODÜLLERİ KAPATMA (sed TEMİZLİĞİ)
+    # MODULES.CONF TEMİZLİĞİ (Compiler'ın klasöre girmesini engeller)
+    # Bu adım, "Import" hatalarını kökten çözer. Klasör derlenmezse, hata oluşmaz.
     # ----------------------------------------------------------------------
-    # 1. Endpoints
+    # 1. Hatalı Modül: mod_spandsp (Lib var ama modülü kapatıyoruz)
+    sed -i 's|^applications/mod_spandsp|#applications/mod_spandsp|g' modules.conf && \
+    # 2. Gereksiz WebRTC ve Endpointler
     sed -i 's|^endpoints/mod_verto|#endpoints/mod_verto|g' modules.conf && \
     sed -i 's|^endpoints/mod_skinny|#endpoints/mod_skinny|g' modules.conf && \
     sed -i 's|^endpoints/mod_dingaling|#endpoints/mod_dingaling|g' modules.conf && \
-    # 2. Applications (Video, Konferans vb.)
+    # 3. Ağır Uygulamalar (Video, Konferans, Voicemail)
     sed -i 's|^applications/mod_voicemail|#applications/mod_voicemail|g' modules.conf && \
     sed -i 's|^applications/mod_conference|#applications/mod_conference|g' modules.conf && \
     sed -i 's|^applications/mod_fsv|#applications/mod_fsv|g' modules.conf && \
@@ -58,17 +64,19 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     sed -i 's|^applications/mod_signalwire|#applications/mod_signalwire|g' modules.conf && \
     sed -i 's|^applications/mod_av|#applications/mod_av|g' modules.conf && \
     sed -i 's|^applications/mod_cv|#applications/mod_cv|g' modules.conf && \
+    # 4. Veritabanı ve Cache (Dış bağımlılık isteyenler)
     sed -i 's|^applications/mod_mongo|#applications/mod_mongo|g' modules.conf && \
     sed -i 's|^applications/mod_redis|#applications/mod_redis|g' modules.conf && \
-    # 3. DATABASES (YENİ EKLEME: Hatayı çözen kısım burası)
-    # configure ile kapatsak bile buradan silmezsek derlemeye çalışıyor.
     sed -i 's|^databases/mod_pgsql|#databases/mod_pgsql|g' modules.conf && \
     sed -i 's|^databases/mod_mariadb|#databases/mod_mariadb|g' modules.conf && \
-    # 4. Languages & ASR
+    # 5. Diller ve TTS
     sed -i 's|^languages/|#languages/|g' modules.conf && \
     sed -i 's|^asr_tts/|#asr_tts/|g' modules.conf && \
     # ----------------------------------------------------------------------
-    # Configure
+    # CONFIGURE AYARLARI (Core'un header çağırmasını engeller)
+    # --without-pgsql: Core koduna "postgres.h include etme" der.
+    # --without-odbc: Core koduna "sql.h include etme" der.
+    # ----------------------------------------------------------------------
     ./configure --prefix=/usr --sysconfdir=/etc/freeswitch --localstatedir=/var \
     --disable-debug \
     --disable-libvpx --disable-libyuv --disable-zrtp \
