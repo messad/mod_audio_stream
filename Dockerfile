@@ -14,7 +14,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /usr/src
 
 # --------------------------------------------------------------------------
-# ADIM 1: Sofia-SIP (Çekirdek Bağımlılığı - ŞART)
+# ADIM 1: Sofia-SIP (ŞART)
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     cd sofia-sip && \
@@ -25,10 +25,7 @@ RUN git clone https://github.com/freeswitch/sofia-sip.git && \
     cd .. && rm -rf sofia-sip
 
 # --------------------------------------------------------------------------
-# ADIM 2: Spandsp (Çekirdek Bağımlılığı - ŞART)
-# DİKKAT: Core'un çalışması için libspandsp KÜTÜPHANESİ şarttır.
-# Bunu kuruyoruz ki Core "header not found" demesin.
-# Ancak aşağıda modülünü (mod_spandsp) kapatacağız ki "versiyon uyuşmazlığı" çıkmasın.
+# ADIM 2: Spandsp (ŞART - Sadece Kütüphane)
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/freeswitch/spandsp.git && \
     cd spandsp && \
@@ -40,23 +37,17 @@ RUN git clone https://github.com/freeswitch/spandsp.git && \
     cd .. && rm -rf spandsp
 
 # --------------------------------------------------------------------------
-# ADIM 3: FreeSWITCH (Güvenli Derleme)
+# ADIM 3: FreeSWITCH (Minimal Bridge - HATASIZ)
 # --------------------------------------------------------------------------
 RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     cd freeswitch && \
     git checkout v1.10.12 && \
     ./bootstrap.sh -j && \
-    # ----------------------------------------------------------------------
-    # MODULES.CONF TEMİZLİĞİ (Compiler'ın klasöre girmesini engeller)
-    # Bu adım, "Import" hatalarını kökten çözer. Klasör derlenmezse, hata oluşmaz.
-    # ----------------------------------------------------------------------
-    # 1. Hatalı Modül: mod_spandsp (Lib var ama modülü kapatıyoruz)
+    # Modül Temizliği
     sed -i 's|^applications/mod_spandsp|#applications/mod_spandsp|g' modules.conf && \
-    # 2. Gereksiz WebRTC ve Endpointler
     sed -i 's|^endpoints/mod_verto|#endpoints/mod_verto|g' modules.conf && \
     sed -i 's|^endpoints/mod_skinny|#endpoints/mod_skinny|g' modules.conf && \
     sed -i 's|^endpoints/mod_dingaling|#endpoints/mod_dingaling|g' modules.conf && \
-    # 3. Ağır Uygulamalar (Video, Konferans, Voicemail)
     sed -i 's|^applications/mod_voicemail|#applications/mod_voicemail|g' modules.conf && \
     sed -i 's|^applications/mod_conference|#applications/mod_conference|g' modules.conf && \
     sed -i 's|^applications/mod_fsv|#applications/mod_fsv|g' modules.conf && \
@@ -64,19 +55,13 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     sed -i 's|^applications/mod_signalwire|#applications/mod_signalwire|g' modules.conf && \
     sed -i 's|^applications/mod_av|#applications/mod_av|g' modules.conf && \
     sed -i 's|^applications/mod_cv|#applications/mod_cv|g' modules.conf && \
-    # 4. Veritabanı ve Cache (Dış bağımlılık isteyenler)
     sed -i 's|^applications/mod_mongo|#applications/mod_mongo|g' modules.conf && \
     sed -i 's|^applications/mod_redis|#applications/mod_redis|g' modules.conf && \
     sed -i 's|^databases/mod_pgsql|#databases/mod_pgsql|g' modules.conf && \
     sed -i 's|^databases/mod_mariadb|#databases/mod_mariadb|g' modules.conf && \
-    # 5. Diller ve TTS
     sed -i 's|^languages/|#languages/|g' modules.conf && \
     sed -i 's|^asr_tts/|#asr_tts/|g' modules.conf && \
-    # ----------------------------------------------------------------------
-    # CONFIGURE AYARLARI (Core'un header çağırmasını engeller)
-    # --without-pgsql: Core koduna "postgres.h include etme" der.
-    # --without-odbc: Core koduna "sql.h include etme" der.
-    # ----------------------------------------------------------------------
+    # Configure
     ./configure --prefix=/usr --sysconfdir=/etc/freeswitch --localstatedir=/var \
     --disable-debug \
     --disable-libvpx --disable-libyuv --disable-zrtp \
@@ -88,10 +73,15 @@ RUN git clone https://github.com/signalwire/freeswitch.git freeswitch && \
     ldconfig && \
     cd /usr/src && rm -rf freeswitch
 
-# 4. mod_audio_stream Derle
+# --------------------------------------------------------------------------
+# ADIM 4: mod_audio_stream Derle (DÜZELTİLDİ: Submodule Eklendi)
+# --------------------------------------------------------------------------
 WORKDIR /usr/src
-RUN git clone https://github.com/amigniter/mod_audio_stream.git && \
+# '--recursive' parametresi libwsc ve diğer alt modülleri indirir.
+RUN git clone --recursive https://github.com/amigniter/mod_audio_stream.git && \
     cd mod_audio_stream && \
+    # Garanti olsun diye submodule update de çalıştırıyoruz
+    git submodule update --init --recursive && \
     mkdir build && cd build && \
     cmake -DCMAKE_BUILD_TYPE=Release \
           -DCMAKE_INSTALL_PREFIX=/usr \
